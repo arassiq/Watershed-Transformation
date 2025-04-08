@@ -53,14 +53,29 @@ def detect_individual_trees(image_path, visualize=True):
     for i, (x, y) in enumerate(tree_centers, start=1):
         markers[x, y] = i
 
-    labels = watershed(-dist_transform, markers, mask=mask)
 
-    print(f"WaterShed Labels: {labels}")
+    labels = watershed(-dist_transform, markers, mask=mask)
+    print(f"Shape of labels: {labels.shape}")
+
+    nativeLabelArr = labels.tolist()
+
+    labelPropArr = []
+    treePresent = 0
+    for row in nativeLabelArr:
+        for pix in row:
+            if pix > 0:
+                treePresent += 1
+
+    labelPropArr.append(f"%{round((treePresent/(300 * 300)) * 100, 2)}")
+
+    print(labelPropArr)
+
 
     result = original.copy()
     tree_count = 0
     for label in range(1, np.max(labels) + 1):
         tree_pixels = np.where(labels == label)
+        print(f"Tree Pixels {tree_pixels}")
 
         if len(tree_pixels[0]) > 0:
             min_x, max_x = np.min(tree_pixels[1]), np.max(tree_pixels[1])
@@ -182,6 +197,6 @@ def tune_parameters(image_path):
 print("\nProcessing the image...")
 result = detect_individual_trees(filename)
 
-output_filename = f"detected_trees_oakland_test_2.jpg"
-cv2.imshow(result)
-cv2.imwrite(output_filename, result)
+#output_filename = f"detected_trees_oakland_test_2.jpg"
+#cv2.imshow(result)
+#cv2.imwrite(output_filename, result)
