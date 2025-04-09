@@ -55,9 +55,9 @@ def detect_individual_trees(image_path, visualize=True):
 
 
     labels = watershed(-dist_transform, markers, mask=mask)
-    print(f"Shape of labels: {labels.shape}")
+    #print(f"Shape of labels: {labels.shape}")
 
-    nativeLabelArr = labels.tolist()
+    '''nativeLabelArr = labels.tolist()
 
     labelPropArr = []
     treePresent = 0
@@ -68,7 +68,7 @@ def detect_individual_trees(image_path, visualize=True):
 
     labelPropArr.append(f"%{round((treePresent/(300 * 300)) * 100, 2)}")
 
-    print(labelPropArr)
+    print(labelPropArr)'''
 
 
     result = original.copy()
@@ -82,6 +82,7 @@ def detect_individual_trees(image_path, visualize=True):
             min_y, max_y = np.min(tree_pixels[0]), np.max(tree_pixels[0])
 
             if (max_x - min_x) > 5 and (max_y - min_y) > 5:
+                #print(f"\nTree {tree_count + 1}:\t minX - maxX: ({min_x}, {max_x}) to minY - maxY{min_y}, {max_y})\n")
                 cv2.rectangle(result, (min_x, min_y), (max_x, max_y), (0, 255, 0), 2)
                 tree_count += 1
 
