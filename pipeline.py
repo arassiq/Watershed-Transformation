@@ -44,6 +44,26 @@ def detect_individual_trees(image_path, visualize=True):
 
     mask = cv2.bitwise_or(mask, mask_enhanced)
 
+    print(f"Mask Shape: {mask.shape}")
+
+    totalPixels = mask.shape[0] * mask.shape[1]
+
+    mask_pixels = np.count_nonzero(mask)
+    coveragePercent = mask_pixels/totalPixels
+    print(f"Coverage Percentage: {coveragePercent * 100:.2f}%")
+    
+    
+    treeArea = 0
+    '''    for msk in mask:
+        print(f"Mask: {msk}")
+        for pixel in msk:
+            if pixel > 0:
+                treeArea += 1'''
+
+    #print(f"Mask Shape: {mask.shape}")
+    #print(f"Areas of Trees: {treeArea / (720 * 1280)}")
+
+
     dist_transform = ndimage.distance_transform_edt(mask)
 
     tree_centers = peak_local_max(dist_transform, min_distance=10,
@@ -75,7 +95,7 @@ def detect_individual_trees(image_path, visualize=True):
     tree_count = 0
     for label in range(1, np.max(labels) + 1):
         tree_pixels = np.where(labels == label)
-        print(f"Tree Pixels {tree_pixels}")
+        #print(f"Tree Pixels {tree_pixels}")
 
         if len(tree_pixels[0]) > 0:
             min_x, max_x = np.min(tree_pixels[1]), np.max(tree_pixels[1])
