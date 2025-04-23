@@ -5,6 +5,12 @@
 		},
 		{
 			"path": "../../Downloads/Oakland Images"
+		},
+		{
+			"path": "../../Downloads/Oakland_Imagery"
+		},
+		{
+			"path": "../../Downloads/oakland_detailed_imagery"
 		}
 	],
 	"settings": {}

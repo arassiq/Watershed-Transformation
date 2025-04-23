@@ -5,7 +5,9 @@ from skimage import measure
 from skimage.feature import peak_local_max
 from scipy import ndimage
 import os
+from cv2 import watershed as cv2_watershed
 from skimage.segmentation import watershed
+import json
 
 filename = '/Users/aaronrassiq/Desktop/Watershed-Transformation/tstImages/AHLV3043.jpg'
 
@@ -62,18 +64,32 @@ class treeDetection:
         #print(f"Areas of Trees: {treeArea / (720 * 1280)}")
 
 
-        dist_transform = ndimage.distance_transform_edt(mask)
+        #dist_transform = ndimage.distance_transform_edt(mask)
+        dist_transform = cv2.distanceTransform(mask, cv2.DIST_L2, 5)
 
         tree_centers = peak_local_max(dist_transform, min_distance=10,
                                     threshold_abs=5, exclude_border=False)
 
-        markers = np.zeros_like(mask, dtype=np.int32)
+        markers = np.zeros_like(mask, dtype=np.int16)
         for i, (x, y) in enumerate(tree_centers, start=1):
             markers[x, y] = i
 
 
-        labels = watershed(-dist_transform, markers, mask=mask)
-        #print(f"Shape of labels: {labels.shape}")
+        # Make sure this is a BGR image (from cv2.imread or original.copy())
+        image_for_ws = original.copy()
+        if image_for_ws.dtype != np.uint8 or len(image_for_ws.shape) != 3 or image_for_ws.shape[2] != 3:
+            raise ValueError("image_for_ws must be a BGR uint8 image")
+
+        # Ensure markers are int32
+        markers = np.zeros(mask.shape, dtype=np.int32)
+        for i, (x, y) in enumerate(tree_centers, start=1):
+            markers[x, y] = i
+
+        # Now this will work
+        cv2.watershed(image_for_ws, markers)
+
+        # After this, markers contains your labels
+        labels = markers.copy()
 
         '''nativeLabelArr = labels.tolist()
 
@@ -233,110 +249,167 @@ class treeDetection:
                 threshold=widgets.IntSlider(min=1, max=20, step=1, value=5, description='Threshold:'))
         
 def overlay_and_save(original_img_path, mask, output_dir, filename):
-    # Load original image
-    image = cv2.imread(original_img_path)
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # If you're using matplotlib or PIL
+    # Clone the original image
+    image = original_img_path.copy()
 
     # Resize mask if necessary
     if mask.shape[:2] != image.shape[:2]:
         mask = cv2.resize(mask, (image.shape[1], image.shape[0]))
 
-    # Convert binary mask to 3-channel
+    # Convert binary mask to red 3-channel mask (BGR: [0, 0, 255])
     if len(mask.shape) == 2:
-        mask_rgb = np.stack([mask * 255, np.zeros_like(mask), np.zeros_like(mask)], axis=2)
+        red_mask = np.zeros_like(image)
+        red_mask[mask > 0] = [0, 0, 255]  # BGR format for red
     else:
-        mask_rgb = mask
+        red_mask = mask
 
-    # Overlay mask (make it transparent)
-    overlayed = cv2.addWeighted(image, 0.7, mask_rgb.astype(np.uint8), 0.3, 0)
+    # Blend red mask over original image at 70% opacity
+    alpha = 0.7
+    overlayed = cv2.addWeighted(red_mask.astype(np.uint8), alpha, image, 1 - alpha, 0)
 
     # Ensure output directory exists
-    os.makedirs(output_dir, exist_ok=True)
+    
+
+    returnto = True
 
     # Save image
-    out_path = os.path.join(output_dir, filename)
-    cv2.imwrite(out_path, cv2.cvtColor(overlayed, cv2.COLOR_RGB2BGR))
+    if not returnto: 
+        os.makedirs(output_dir, exist_ok=True)
+        out_path = os.path.join(output_dir, filename)
+        cv2.imwrite(out_path, cv2.cvtColor(overlayed, cv2.COLOR_RGB2BGR))  # OpenCV expects BGR for saving
 
-    print(f"Saved overlay result to {out_path}")
+    if returnto:
+        return cv2.cvtColor(overlayed, cv2.COLOR_RGB2BGR)
+
 
 def main():
     tree_detector = treeDetection()
-    img2024, img2023, img2022, img2021, img2020, img2019, im2018, img2017, img2016 = [], [], [], [], []
 
-    im = "/Users/aaronrassiq/Desktop/Watershed-Transformation/tstImages/3-2-2024-300-300.jpg"
-    output_dir = "/Users/aaronrassiq/Desktop/Watershed-Transformation/resultImageDir"
-    if os.path.doesntexist(output_dir):
-        os.makedirs(output_dir)
-
-    coveragePercent, result = tree_detector.detect_individual_trees(im, visualize=True)
-
+    target = "11"
+    imgFiles = []
     for root, dirs, files in os.walk("/Users/aaronrassiq/Downloads/Oakland Images"):
         for file in files:
-            if file.endswith(".jpg") or file.endswith(".png"):
-                filename = os.path.join(root, file)
+            if target in (file.split("-")[0]):
+                imgFiles.append(os.path.join(root, file))
+                print(f"Found file: {file}")
 
-                if "2021" in filename:
-                    img2021.append(filename)
-                elif "2022" in filename:
-                    img2022.append(filename)
-                elif "2023" in filename:
-                    img2023.append(filename)
-                elif "2024" in filename:
-                    img2024.append(filename)
-              
+    output_dir = "/Users/aaronrassiq/Desktop/Watershed-Transformation/11ImageOrigAndNew"
 
-                    
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    coveragedict = {}
 
-                    '''coveragePercent, result = tree_detector.detect_individual_trees(filename, visualize=False)
-                    print(f"Coverage Percentage: {coveragePercent * 100:.2f}%")
-                    output_filename = f"detected_trees_{file}"
-                    cv2.imwrite(output_filename, result)'''
+    for imgPath in imgFiles:
 
-    print(f"2021: {len(img2021)} images")
-    print(f"2022: {len(img2022)} images")
-    print(f"2023: {len(img2023)} images")
-    print(f"2024: {len(img2024)} images")
-    print(f"2025: {len(img2025)} images")
+        print(f"Processing {imgPath}")
+        coveragePercent, result, ogImage= tree_detector.detect_individual_trees(imgPath, visualize=False)
+        print(f"Coverage Percentage: {coveragePercent * 100:.2f}%")
+
+        overlayedImage = overlay_and_save(ogImage, result, output_dir, imgPath.split("/")[-1])
+        coveragedict[imgPath.split("/")[-1]] = f"{coveragePercent * 100:.2f}%"
+
+        cv2.imwrite(output_dir + "/" + imgPath.split("/")[-1], ogImage)
+        cv2.imwrite(output_dir + "/" + "MASK" + imgPath.split("/")[-1] , overlayedImage)
+
+    json_output_path = os.path.join(output_dir, "coverage_data.json")
+
+    with open(json_output_path, "w") as f:
+        json.dump(coveragedict, f, indent=4)
+
+    print(f"Saved coverage percentages to {json_output_path}")
+
 
     bool2025to2021 = False
 
     if bool2025to2021:
+        img2024, img2023, img2022, img2021, img2020, img2019, im2018, img2017, img2016 = [], [], [], [], [], [], [], [], []
+
+
+        output_dir = "/Users/aaronrassiq/Desktop/Watershed-Transformation/resultImageDir"
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+
+
+        for root, dirs, files in os.walk("/Users/aaronrassiq/Downloads/oakland_detailed_imagery"):
+            for file in files:
+                if file.endswith(".jpg") or file.endswith(".png"):
+                    filename = os.path.join(root, file)
+
+                    rootLen = len(root)
+
+                    if "2016" in filename[:(rootLen +13)] and "naip" in filename.lower():
+                        img2016.append(filename)
+                    elif "2017" in filename[:(rootLen +13)] and "naip" in filename.lower():
+                        img2017.append(filename)
+                    elif "2018" in filename[:(rootLen +13)] and "naip" in filename.lower():
+                        im2018.append(filename)
+                    elif "2019" in filename[:(rootLen +13)] and "naip" in filename.lower():
+                        img2019.append(filename)
+                    elif "2020" in filename[:(rootLen +13)] and "naip" in filename.lower():
+                        img2020.append(filename)
+                    elif "2021" in filename[:(rootLen +13)] and "naip" in filename.lower():
+                        img2021.append(filename)
+                    elif "2022" in filename[:(rootLen +13)] and "naip" in filename.lower():
+                        img2022.append(filename)
+                    elif "2023" in filename[:(rootLen +13)] and "naip" in filename.lower():
+                        img2023.append(filename)
+                    elif "2024" in filename[:(rootLen +13)] and "naip" in filename.lower():
+                        img2024.append(filename)
+                    else:
+                        pass
+
+                
+                        '''coveragePercent, result = tree_detector.detect_individual_trees(filename, visualize=False)
+                        print(f"Coverage Percentage: {coveragePercent * 100:.2f}%")
+                        output_filename = f"detected_trees_{file}"
+                        cv2.imwrite(output_filename, result)'''
+
+        print(f"2016: {len(img2016)} images")
+        print(f"2017: {len(img2017)} images")
+        print(f"2018: {len(im2018)} images")
+        print(f"2019: {len(img2019)} images")
+        print(f"2020: {len(img2020)} images")
+        print(f"2021: {len(img2021)} images")
+        print(f"2022: {len(img2022)} images")
+        print(f"2023: {len(img2023)} images")
+        print(f"2024: {len(img2024)} images")
             
 
         percentage2021, percentage2025 = 0, 0
 
-        total_green_pixels_2021 = 0
-        total_pixels_2021 = 0
+        total_green_pixels_2016 = 0
+        total_pixels_2016 = 0
 
-        for im in img2021:
+        for im in img2016:
             coveragePercent, result, ogImage= tree_detector.detect_individual_trees(im, visualize=False)
 
             image = cv2.imread(im)
             h, w = image.shape[:2]
-            total_pixels_2021 += h * w
-            total_green_pixels_2021 += coveragePercent * h * w
+            total_pixels_2016 += h * w
+            total_green_pixels_2016 += coveragePercent * h * w
 
             overlay_and_save(ogImage, result, output_dir, im)
             # plot the result on the ogImage and save it to dir
 
         
-        total_green_pixels_2025 = 0
-        total_pixels_2025 = 0
+        total_green_pixels_2023 = 0
+        total_pixels_2023 = 0
         
-        for im in img2025:
+        for im in img2023:
             coveragePercent, result, ogImage = tree_detector.detect_individual_trees(im, visualize=False)
 
             image = cv2.imread(im)
             h, w = image.shape[:2]
-            total_pixels_2025 += h * w
-            total_green_pixels_2025 += coveragePercent * h * w
+            total_pixels_2023 += h * w
+            total_green_pixels_2023 += coveragePercent * h * w
             overlay_and_save(ogImage, result, output_dir, im)
         
 
-        total_percent_2021 = (total_green_pixels_2021 / total_pixels_2021) * 100
-        print(f"Total green coverage in 2021: {total_percent_2021:.2f}%")
-        total_percent_2025 = (total_green_pixels_2025 / total_pixels_2025) * 100
-        print(f"Total green coverage in 2025: {total_percent_2025:.2f}%")
+        total_percent_2016 = (total_green_pixels_2016 / total_pixels_2016) * 100
+        print(f"Total green coverage in 2016: {total_percent_2016:.2f}%")
+        total_percent_2023 = (total_green_pixels_2023 / total_pixels_2023) * 100
+        print(f"Total green coverage in 2023: {total_percent_2023:.2f}%")
         
 
     
